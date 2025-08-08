@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FHIR R5 Patient CRUD — Side Sheet</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
+  <style>
+    body { padding: 20px; }
+    .error { color: #c62828; font-size: 0.95em; margin-bottom: 10px; }
+    table.striped > tbody > tr:nth-child(odd) { background-color: #f6f8f9; }
+    .pagination-btns { margin-top: 15px; }
+    .actions .btn-small { margin-right: 6px; }
+    .helper { color:#546e7a; font-size: 0.9em; }
+    /* Row highlighting */
+    #patientTable tbody tr { cursor: pointer; }
+    #patientTable tbody tr.row-selected { background-color: #e0f2f1 !important; }
+
+    /* Side sheet */
+    .sidenav { width: 520px; }
+    .sheet-header { padding: 16px 24px 8px; border-bottom: 1px solid #e0e0e0; }
+    .sheet-title { margin: 0; font-weight: 600; }
+    .sheet-content { padding: 0 24px 24px; }
+    .sheet-actions { padding: 8px 24px 16px; display: flex; gap: 8px; align-items: center; }
+    .sheet-section { margin-top: 12px; }
+    .confirm-bar { background: #fff3e0; padding: 10px 12px; border-radius: 6px; margin: 8px 0 0; display: none; }
+    .confirm-bar .btn-small { margin-right: 8px; }
+    .muted { color: #607d8b; font-size: .9em; }
+  </style>
+</head>
+<body class="container">
+  <h4 class="teal-text text-darken-3">FHIR R5 Patient Management</h4>
+
+  <!-- Toolbar -->
+  <div class="row valign-wrapper">
+    <div class="input-field col s12 m6">
+      <input id="searchInput" type="text" placeholder="Search patients by name..."/>
+      <span class="helper">Example: "smith"</span>
+    </div>
+    <div class="col s12 m6">
+      <button class="btn waves-effect waves-light teal" id="btnSearch">Search<i class="material-icons right">search</i></button>
+      <button class="btn waves-effect waves-light grey" id="btnListAll">List All<i class="material-icons right">list</i></button>
+      <button class="btn waves-effect waves-light" id="btnAdd"><i class="material-icons left">add</i>Add Patient</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <table class="striped highlight responsive-table" id="patientTable">
+    <thead class="teal lighten-4">
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Gender</th>
+        <th>Birth Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- Paging -->
+  <div class="pagination-btns">
+    <button class="btn-small teal" id="prevBtn" disabled>Previous</button>
+    <button class="btn-small teal" id="nextBtn" disabled>Next</button>
+  </div>
+
+  <!-- SIDE SHEET (right) -->
+  <div id="detailSheet" class="sidenav">
+    <div class="sheet-header">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h6 id="sheetTitle" class="sheet-title">Details</h6>
+        <button class="btn-flat" id="btnCloseSheet" aria-label="Close">
+          <i class="material-icons">close</i>
+        </button>
+      </div>
+      <div class="sheet-actions">
+        <!-- View mode actions -->
+        <button class="btn waves-effect waves-light teal" id="btnEdit" style="display:none;">
+          <i class="material-icons left">edit</i>Edit
+        </button>
+        <button class="btn waves-effect red" id="btnDelete" style="display:none;">
+          <i class="material-icons left">delete</i>Delete
+        </button>
+
+        <!-- Edit/Create mode actions -->
+        <button class="btn waves-effect waves-light teal" id="btnSave" style="display:none;">
+          <i class="material-icons left">save</i>Save
+        </button>
+        <button class="btn waves-effect grey" id="btnCancel" style="display:none;">
+          <i class="material-icons left">cancel</i>Cancel
+        </button>
+      </div>
+
+      <!-- Inline confirm for delete (no pop-ups) -->
+      <div id="deleteConfirm" class="confirm-bar">
+        <span>Delete this patient? This may cascade related data.</span>
+        <div style="margin-top: 8px;">
+          <button class="btn-small red" id="btnConfirmDelete">Confirm Delete</button>
+          <button class="btn-small grey" id="btnCancelDelete">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-content">
+      <div id="errorContainer" class="error"></div>
+
+      <input type="hidden" id="patientId"/>
+
+      <!-- Identifier (optional in base R5) -->
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <input id="identifierSystem" type="text" placeholder="https://hospital.example.org/mrn">
+          <label for="identifierSystem">Identifier System (URI)</label>
+          <span class="helper">Optional. Example: https://example.org/mrn</span>
+        </div>
+        <div class="input-field col s12 m6">
+          <input id="identifierValue" type="text" placeholder="12345678">
+          <label for="identifierValue">Identifier Value</label>
+          <span class="helper">Optional. Example: MRN or other ID</span>
+        </div>
+      </div>
+
+      <!-- Name (optional in base R5) -->
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <input id="firstName" type="text"/>
+          <label for="firstName">First Name (Given)</label>
+        </div>
+        <div class="input-field col s12 m6">
+          <input id="lastName" type="text"/>
+          <label for="lastName">Last Name (Family)</label>
+        </div>
+      </div>
+
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <select id="gender">
+            <option value="" disabled selected>--Select--</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <label>Gender</label>
+        </div>
+        <div class="input-field col s12 m6">
+          <input type="date" id="birthDate"/>
+          <label class="active" for="birthDate">Birth Date</label>
+        </div>
+      </div>
+
+      <!-- Address (optional) -->
+      <div class="row sheet-section">
+        <div class="input-field col s12">
+          <input type="text" id="addressLine"/>
+          <label for="addressLine">Address Line</label>
+        </div>
+      </div>
+
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <input type="text" id="city"/>
+          <label for="city">City</label>
+        </div>
+        <div class="input-field col s12 m6">
+          <input type="text" id="state"/>
+          <label for="state">State/Province</label>
+        </div>
+      </div>
+
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <input type="text" id="postalCode"/>
+          <label for="postalCode">Postal Code</label>
+        </div>
+        <div class="input-field col s12 m6">
+          <select id="country"></select>
+          <label>Country</label>
+        </div>
+      </div>
+
+      <div class="row sheet-section">
+        <div class="input-field col s12 m6">
+          <input type="text" id="phone"/>
+          <label for="phone">Phone</label>
+        </div>
+        <div class="input-field col s12 m6">
+          <input type="email" id="email"/>
+          <label for="email">Email</label>
+        </div>
+      </div>
+
+      <div class="muted sheet-section" id="viewHint" style="display:none;">Viewing — click Edit to make changes.</div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    // ====== CONFIG ======
+    const fhirBaseUrl = "https://hapi.fhir.org/baseR5"; // Base R5
+    const PAGE_SIZE = 10;
+    const DEBUG = true;
+    const dlog = (...args) => { if (DEBUG) console.log('[NET]', ...args); };
+
+    // ====== ENUMS ======
+    const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"]; // kept for reference if needed
+    const ISO_COUNTRIES = ["AF","AX","AL","DZ","AS","AD","AO","AI","AQ","AG","AR","AM","AW","AU","AT","AZ","BS","BH","BD","BB","BY","BE","BZ","BJ","BM","BT","BO","BQ","BA","BW","BV","BR","IO","BN","BG","BF","BI","CV","KH","CM","CA","KY","CF","TD","CL","CN","CX","CC","CO","KM","CG","CD","CK","CR","CI","HR","CU","CW","CY","CZ","DK","DJ","DM","DO","EC","EG","SV","GQ","ER","EE","SZ","ET","FK","FO","FJ","FI","FR","GF","PF","TF","GA","GM","GE","DE","GH","GI","GR","GL","GD","GP","GU","GT","GG","GN","GW","GY","HT","HM","VA","HN","HK","HU","IS","IN","ID","IR","IQ","IE","IM","IL","IT","JM","JP","JE","JO","KZ","KE","KI","KP","KR","KW","KG","LA","LV","LB","LS","LR","LY","LI","LT","LU","MO","MG","MW","MY","MV","ML","MT","MH","MQ","MR","MU","YT","MX","FM","MD","MC","MN","ME","MS","MA","MZ","MM","NA","NR","NP","NL","NC","NZ","NI","NE","NG","NU","NF","MK","MP","NO","OM","PK","PW","PS","PA","PG","PY","PE","PH","PN","PL","PT","PR","QA","RE","RO","RU","RW","BL","SH","KN","LC","MF","PM","VC","WS","SM","ST","SA","SN","RS","SC","SL","SG","SX","SK","SI","SB","SO","ZA","GS","SS","ES","LK","SD","SR","SJ","SE","CH","SY","TW","TJ","TZ","TH","TL","TG","TK","TO","TT","TN","TR","TM","TC","TV","UG","UA","AE","GB","US","UM","UY","UZ","VU","VE","VN","VG","VI","WF","EH","YE","ZM","ZW"];
+
+    // ====== PAGINATION STATE ======
+    const paging = { nextUrl: null, prevUrl: null };
+    let lastRequestUrl = null;
+
+    // ====== PERSISTED ROW SELECTION ======
+    const SELECT_KEY='selectedPatientId';
+    let selectedRow=null;
+    function getStoredSelectedId(){ try{return localStorage.getItem(SELECT_KEY);}catch{return null;} }
+    function setStoredSelectedId(id){ try{ if(isSafeResourceId(id)) localStorage.setItem(SELECT_KEY,id); else localStorage.removeItem(SELECT_KEY);}catch{} }
+    function clearStoredSelectedId(){ try{localStorage.removeItem(SELECT_KEY);}catch{} }
+    function selectRow(row){ if(selectedRow && selectedRow!==row) selectedRow.classList.remove('row-selected'); selectedRow=row; if(row){ row.classList.add('row-selected'); const pid=row.dataset.pid||''; if(pid) setStoredSelectedId(pid); } }
+
+    // ====== UTIL ======
+    function reinitSelect(el){ const inst=M.FormSelect.getInstance(el); if(inst) inst.destroy(); M.FormSelect.init(el); }
+    function setSelectValue(selectEl,value){ if(value==null||value==='') return; let has=false; for(const o of selectEl.options){ if(o.value===value){has=true;break;} } if(!has) selectEl.add(new Option(value,value)); selectEl.value=value; reinitSelect(selectEl); }
+    function isSafeResourceId(id){ return typeof id==='string' && /^[A-Za-z0-9\-.]{1,64}$/.test(id); }
+
+    // ====== Name helpers (R5 safe) ======
+    function pickOfficialOrFirst(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const official = arr.find(n => n && n.use === 'official');
+      return official || arr[0];
+    }
+    function humanNameToDisplay(n) {
+      if (!n) return '';
+      const given = Array.isArray(n.given) ? n.given.join(' ') : '';
+      const family = n.family || '';
+      const combined = [given, family].filter(Boolean).join(' ').trim();
+      return combined || (n.text ? String(n.text).trim() : '');
+    }
+    function splitNameText(text) {
+      const t = (text || '').trim();
+      if (!t) return { given: '', family: '' };
+      if (t.includes(',')) {
+        const parts = t.split(',');
+        const family = parts[0].trim();
+        const given = parts.slice(1).join(',').trim();
+        return { given, family };
+      }
+      const parts = t.split(/\s+/);
+      if (parts.length === 1) return { given: parts[0], family: '' };
+      const family = parts.pop();
+      const given = parts.join(' ');
+      return { given, family };
+    }
+
+    // ====== SHEET STATE ======
+    let sheetInst=null;
+    let currentMode='view'; // 'view' | 'edit' | 'create'
+    let cachedPatient=null; // last loaded/being edited patient
+
+    function openSheet(mode){
+      currentMode = mode;
+      sheetInst.open();
+      updateSheetModeUI();
+    }
+    function closeSheet(){
+      sheetInst.close();
+      hideDeleteConfirm();
+    }
+    function updateSheetModeUI(){
+      const isView = currentMode==='view';
+      const isEdit = currentMode==='edit';
+      const isCreate = currentMode==='create';
+
+      // Buttons
+      document.getElementById('btnEdit').style.display = isView ? 'inline-block' : 'none';
+      document.getElementById('btnDelete').style.display = (isView && canDelete!==false && isSafeResourceId(document.getElementById('patientId').value)) ? 'inline-block' : 'none';
+      document.getElementById('btnSave').style.display = (isEdit || isCreate) ? 'inline-block' : 'none';
+      document.getElementById('btnCancel').style.display = (isEdit || isCreate) ? 'inline-block' : 'none';
+      document.getElementById('viewHint').style.display = isView ? 'block' : 'none';
+
+      // Title
+      const id = document.getElementById('patientId').value || '';
+      const title = isCreate ? 'Add Patient' : (isEdit ? `Edit Patient` : `Patient Details${id?` — ${id}`:''}`);
+      document.getElementById('sheetTitle').innerText = title;
+
+      // Enable/disable fields
+      const disabled = isView;
+      const ids = ['identifierSystem','identifierValue','firstName','lastName','gender','birthDate','addressLine','city','state','postalCode','country','phone','email'];
+      ids.forEach(i=>{
+        const el=document.getElementById(i);
+        if(!el) return;
+        el.disabled = disabled;
+        if(el.tagName==='SELECT') reinitSelect(el);
+      });
+      M.updateTextFields();
+    }
+
+    function showDeleteConfirm(){ document.getElementById('deleteConfirm').style.display='block'; }
+    function hideDeleteConfirm(){ document.getElementById('deleteConfirm').style.display='none'; }
+
+    // ====== FETCH WRAPPER (console traces kept) ======
+    async function fetchJSON(url, opts={}){
+      const method=(opts.method||'GET').toUpperCase();
+      dlog(method, url);
+      const options={ headers:{ 'Accept':'application/fhir+json', ...(opts.headers||{}) }, ...opts };
+      if(options.body && !options.headers['Content-Type']) options.headers['Content-Type']='application/fhir+json;charset=utf-8';
+
+      try{
+        const res=await fetch(url, options);
+        const isJSON=(res.headers.get('content-type')||'').includes('json');
+        if(!res.ok){
+          let detail=''; 
+          try{
+            const oo=isJSON?await res.json():JSON.parse(await res.text());
+            if(oo && Array.isArray(oo.issue)){ detail=oo.issue.map(i=>i.diagnostics||(i.details&&i.details.text)||'').filter(Boolean).join('; '); }
+          }catch{}
+          console.error('[NET]', method, res.status, url, detail || '');
+          const err=new Error(`HTTP ${res.status}${detail?': '+detail:''}`);
+          err.status=res.status;
+          throw err;
+        }
+        console.log('[NET]', method, res.status, url);
+        return isJSON ? res.json() : res.text();
+      }catch(e){
+        if(!(e && typeof e.status==='number')){
+          console.error('[NET]', method, 'NETWORK', url, e && e.message ? e.message : 'Network error');
+        }
+        throw e;
+      }
+    }
+
+    // ====== FETCH & RENDER (GET) ======
+    async function fetchAndRender(url){
+      try{
+        const bundle=await fetchJSON(url);
+        displayPatients(bundle.entry||[]);
+        updatePagination(bundle.link||[]);
+        lastRequestUrl=url;
+      }catch(err){
+        console.error('GET failed:', err);
+        M.toast({ html:`Request failed: ${err.message}` });
+      }
+    }
+
+    // ====== LIST & SEARCH ======
+    async function listPatients(url){
+      const target=url || `${fhirBaseUrl}/Patient?_count=${PAGE_SIZE}`;
+      await fetchAndRender(target);
+    }
+    async function searchPatients(url){
+      let target=url;
+      if(!target){
+        const q=document.getElementById('searchInput').value.trim();
+        if(!q) return listPatients();
+        target=`${fhirBaseUrl}/Patient?name=${encodeURIComponent(q)}&_count=${PAGE_SIZE}`;
+      }
+      await fetchAndRender(target);
+    }
+    function nextPage(){ if(paging.nextUrl) fetchAndRender(paging.nextUrl); }
+    function prevPage(){ if(paging.prevUrl) fetchAndRender(paging.prevUrl); }
+
+    // ====== UPDATE PAGINATION BUTTONS ======
+    function updatePagination(links=[]){
+      paging.nextUrl=null; paging.prevUrl=null;
+      for(const link of links){ if(link.relation==='next') paging.nextUrl=link.url; if(link.relation==='previous') paging.prevUrl=link.url; }
+      document.getElementById('nextBtn').disabled=!paging.nextUrl;
+      document.getElementById('prevBtn').disabled=!paging.prevUrl;
+    }
+
+    // ====== TABLE RENDER ======
+    function displayPatients(entries){
+      const tbody=document.querySelector('#patientTable tbody');
+      tbody.innerHTML=''; selectedRow=null;
+      const storedId=getStoredSelectedId();
+
+      (entries||[]).forEach(e=>{
+        const p=e.resource||{};
+        const nameObj = pickOfficialOrFirst(p.name);
+        const name = humanNameToDisplay(nameObj) || '(no name)';
+        const row=document.createElement('tr');
+        row.dataset.pid=p.id||'';
+        row.innerHTML=`
+          <td>${p.id||''}</td>
+          <td>${name}</td>
+          <td>${p.gender||''}</td>
+          <td>${p.birthDate||''}</td>
+          <td class="actions">
+            <button type="button" class="btn-small teal edit-btn" aria-label="Edit patient"><i class="material-icons" aria-hidden="true">edit</i></button>
+            <button type="button" class="btn-small red delete-btn" aria-label="Delete patient"><i class="material-icons" aria-hidden="true">delete</i></button>
+          </td>`;
+
+        // Row click -> view sheet
+        row.addEventListener('click', async ()=>{ selectRow(row); await viewPatient(p.id); });
+
+        // Row actions
+        const editBtn=row.querySelector('button.edit-btn');
+        const delBtn=row.querySelector('button.delete-btn');
+        if(editBtn){
+          editBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); selectRow(row); await editPatient(p.id); });
+        }
+        if(delBtn){
+          delBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); selectRow(row); await openDeleteConfirmFor(p.id); });
+        }
+
+        tbody.appendChild(row);
+        if(storedId && p.id===storedId) selectRow(row);
+      });
+    }
+
+    // ====== DROPDOWNS ======
+    function populateDropdowns(){
+      const countrySel=document.getElementById('country');
+      countrySel.innerHTML='<option value="" disabled selected>--Select--</option>';
+      ISO_COUNTRIES.forEach(c=>countrySel.add(new Option(c,c)));
+      reinitSelect(document.getElementById('gender'));
+      reinitSelect(countrySel);
+    }
+
+    // ====== FORM FILL/BUILD ======
+    function fillFormFromPatient(p){
+      cachedPatient = p || null;
+
+      // identifier
+      const id0 = (p && p.identifier && p.identifier[0]) || {};
+      document.getElementById('identifierSystem').value = id0.system || '';
+      document.getElementById('identifierValue').value  = id0.value  || '';
+
+      // name (handle given/family or text)
+      const n = pickOfficialOrFirst(p && p.name);
+      let given0 = (n && Array.isArray(n.given) && n.given[0]) || '';
+      let family0 = (n && n.family) || '';
+      if (!given0 && !family0 && n && n.text) {
+        const parsed = splitNameText(n.text);
+        given0 = parsed.given; family0 = parsed.family;
+      }
+      document.getElementById('firstName').value = given0;
+      document.getElementById('lastName').value  = family0;
+
+      // simple scalars
+      setSelectValue(document.getElementById('gender'), (p && p.gender) || '');
+      document.getElementById('birthDate').value = (p && p.birthDate) || '';
+
+      // address
+      const a0 = (p && p.address && p.address[0]) || {};
+      document.getElementById('addressLine').value = Array.isArray(a0.line) && a0.line[0] ? a0.line[0] : '';
+      document.getElementById('city').value       = a0.city || '';
+      document.getElementById('state').value      = a0.state || '';
+      document.getElementById('postalCode').value = a0.postalCode || '';
+      setSelectValue(document.getElementById('country'), a0.country || '');
+
+      // telecom
+      const phone = (p && Array.isArray(p.telecom) ? p.telecom.find(t=>t.system==='phone') : null);
+      const email = (p && Array.isArray(p.telecom) ? p.telecom.find(t=>t.system==='email') : null);
+      document.getElementById('phone').value = phone ? (phone.value||'') : '';
+      document.getElementById('email').value = email ? (email.value||'') : '';
+
+      // id + labels
+      document.getElementById('patientId').value = (p && p.id) || '';
+      M.updateTextFields();
+    }
+
+    function buildPatientFromForm(){
+      const id=document.getElementById('patientId').value.trim();
+      const idSystem=document.getElementById('identifierSystem').value.trim();
+      const idValue=document.getElementById('identifierValue').value.trim();
+
+      const given=document.getElementById('firstName').value.trim();
+      const family=document.getElementById('lastName').value.trim();
+      const gender=document.getElementById('gender').value;
+      const birthDate=document.getElementById('birthDate').value;
+      const addressLine=document.getElementById('addressLine').value.trim();
+      const city=document.getElementById('city').value.trim();
+      const state=document.getElementById('state').value.trim();
+      const postalCode=document.getElementById('postalCode').value.trim();
+      const country=document.getElementById('country').value;
+      const phone=document.getElementById('phone').value.trim();
+      const email=document.getElementById('email').value.trim();
+
+      let identifier;
+      if (idSystem || idValue) {
+        const ident = {};
+        if (idSystem) ident.system = idSystem;
+        if (idValue) ident.value = idValue;
+        ident.use = 'official';
+        identifier = [ident];
+      }
+
+      const names = (given || family) ? [{
+        ...(given ? { given: [given] } : {}),
+        ...(family ? { family } : {}),
+        use: 'official'
+      }] : undefined;
+
+      let addresses;
+      if (addressLine || city || state || postalCode || country) {
+        const addr = {
+          ...(addressLine ? { line: [addressLine] } : {}),
+          ...(city ? { city } : {}),
+          ...(state ? { state } : {}),
+          ...(postalCode ? { postalCode } : {}),
+          ...(country ? { country } : {}),
+          use: 'home'
+        };
+        addresses = [addr];
+      }
+
+      const telecom = [];
+      if (phone) telecom.push({ system:'phone', value:phone, use:'mobile' });
+      if (email) telecom.push({ system:'email', value:email });
+
+      const patient = {
+        resourceType:'Patient',
+        ...(identifier ? { identifier } : {}),
+        ...(names ? { name: names } : {}),
+        ...(gender ? { gender } : {}),
+        ...(birthDate ? { birthDate } : {}),
+        ...(addresses ? { address: addresses } : {}),
+        ...(telecom.length ? { telecom } : {}),
+        active: true
+      };
+      if (id) patient.id=id;
+      return patient;
+    }
+
+    // ====== VALIDATION (Base R5: validate only if present) ======
+    function validateForm(){
+      const errors=[];
+      const idSystem=document.getElementById('identifierSystem').value.trim();
+      const genderVal=document.getElementById('gender').value;
+      const birthDateVal=document.getElementById('birthDate').value;
+      const countryVal=document.getElementById('country').value;
+      const emailVal=document.getElementById('email').value.trim();
+
+      if (idSystem && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(idSystem)) errors.push('Identifier system must be a URI (e.g., https://example.org).');
+      if (genderVal && !['male','female','other','unknown'].includes(genderVal)) errors.push('Invalid gender code');
+      if (birthDateVal && !/^\d{4}-\d{2}-\d{2}$/.test(birthDateVal)) errors.push('Birth date must be YYYY-MM-DD');
+      if (countryVal && !ISO_COUNTRIES.includes(countryVal)) errors.push('Invalid country code (ISO 3166-1 alpha-2).');
+      if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) errors.push('Invalid email format');
+
+      return errors;
+    }
+
+    // ====== CRUD (sheet-aware) ======
+    async function viewPatient(id){
+      if(!id) return;
+      try{
+        const p=await fetchJSON(`${fhirBaseUrl}/Patient/${encodeURIComponent(id)}`);
+        fillFormFromPatient(p);
+        openSheet('view');
+      }catch(err){
+        console.error(err);
+        M.toast({ html:`Failed to load patient: ${err.message}` });
+      }
+    }
+
+    async function editPatient(id){
+      if(id){
+        try{
+          const p=await fetchJSON(`${fhirBaseUrl}/Patient/${encodeURIComponent(id)}`);
+          fillFormFromPatient(p);
+        }catch(err){
+          console.error(err);
+          M.toast({ html:`Failed to load patient: ${err.message}` });
+          return;
+        }
+      }else{
+        // new patient
+        resetForm();
+      }
+      openSheet(id ? 'edit' : 'create');
+    }
+
+    async function savePatient(){
+      const errors=validateForm();
+      const errorContainer=document.getElementById('errorContainer');
+      if(errors.length){ errorContainer.innerHTML=errors.join('<br>'); return; }
+      errorContainer.innerHTML='';
+
+      const patient=buildPatientFromForm();
+      const hasId=!!patient.id;
+      const url=hasId? `${fhirBaseUrl}/Patient/${encodeURIComponent(patient.id)}` : `${fhirBaseUrl}/Patient`;
+      const method=hasId? 'PUT':'POST';
+      try{
+        await fetchJSON(url,{ method, body: JSON.stringify(patient) });
+        M.toast({ html: hasId ? 'Patient updated' : 'Patient created' });
+        closeSheet();
+        if(lastRequestUrl) fetchAndRender(lastRequestUrl); else listPatients();
+      }catch(err){
+        console.error('Save failed:', err);
+        M.toast({ html:`Save failed: ${err.message}` });
+      }
+    }
+
+    // Delete flow: inline confirm (no window.confirm)
+    async function openDeleteConfirmFor(id){
+      if(!isSafeResourceId(id)){ M.toast({ html: 'Delete unavailable: missing/invalid id' }); return; }
+      // ensure sheet shows the patient (for context)
+      try{
+        const p=await fetchJSON(`${fhirBaseUrl}/Patient/${encodeURIComponent(id)}`);
+        fillFormFromPatient(p);
+      }catch(e){ /* if GET fails, still allow confirm by id */ 
+        document.getElementById('patientId').value = id;
+      }
+      openSheet('view');
+      showDeleteConfirm();
+    }
+
+    async function confirmDelete(){
+      const id=document.getElementById('patientId').value;
+      if(!isSafeResourceId(id)){ M.toast({ html: 'Delete unavailable: missing/invalid id' }); return; }
+
+      try{
+        const url = `${fhirBaseUrl}/Patient/${encodeURIComponent(id)}?_cascade=delete`;
+        await fetchJSON(url, { method:'DELETE' });
+        if(getStoredSelectedId()===id){ clearStoredSelectedId(); if(selectedRow) selectedRow.classList.remove('row-selected'); selectedRow=null; }
+        M.toast({ html:'Patient deleted' });
+        closeSheet();
+        if(lastRequestUrl) fetchAndRender(lastRequestUrl); else listPatients();
+      }catch(err){
+        console.error('Delete failed:', err);
+        M.toast({ html:`Delete failed: ${err.message}` });
+      }
+    }
+
+    function resetForm(){
+      cachedPatient=null;
+      document.getElementById('patientId').value='';
+      document.getElementById('identifierSystem').value='';
+      document.getElementById('identifierValue').value='';
+      document.getElementById('firstName').value='';
+      document.getElementById('lastName').value='';
+      document.getElementById('gender').value='';
+      document.getElementById('birthDate').value='';
+      document.getElementById('addressLine').value='';
+      document.getElementById('city').value='';
+      document.getElementById('state').value='';
+      document.getElementById('postalCode').value='';
+      document.getElementById('country').value='';
+      document.getElementById('phone').value='';
+      document.getElementById('email').value='';
+      document.getElementById('errorContainer').innerHTML='';
+      reinitSelect(document.getElementById('gender'));
+      reinitSelect(document.getElementById('country'));
+      M.updateTextFields();
+    }
+
+    // ====== DELETE CAPABILITY CHECK ======
+    let canDelete=null; let deleteDisableReason='';
+    async function checkDeleteCapability(){
+      try{
+        const cs=await fetchJSON(`${fhirBaseUrl}/metadata`);
+        let supported=false;
+        for(const rest of (cs.rest||[])){
+          for(const res of (rest.resource||[])){
+            if(res.type==='Patient' && Array.isArray(res.interaction)){
+              if(res.interaction.some(i=>i.code==='delete')){ supported=true; break; }
+            }
+          }
+          if(supported) break;
+        }
+        canDelete=supported;
+        deleteDisableReason=supported?'':'Delete disabled: server CapabilityStatement does not support DELETE for Patient';
+      }catch(e){ /* leave unknown */ }
+    }
+
+    // ====== BOOT ======
+    document.addEventListener('DOMContentLoaded', function (){
+      // init selects + country list
+      M.FormSelect.init(document.querySelectorAll('select'));
+      populateDropdowns();
+
+      // init sheet
+      sheetInst = M.Sidenav.init(document.getElementById('detailSheet'), { edge:'right', draggable:false });
+      document.getElementById('btnCloseSheet').addEventListener('click', closeSheet);
+
+      // toolbar
+      document.getElementById('btnSearch').addEventListener('click', ()=>searchPatients());
+      document.getElementById('btnListAll').addEventListener('click', ()=>listPatients());
+      document.getElementById('btnAdd').addEventListener('click', ()=>{ resetForm(); openSheet('create'); });
+
+      // paging
+      document.getElementById('nextBtn').addEventListener('click', nextPage);
+      document.getElementById('prevBtn').addEventListener('click', prevPage);
+
+      // sheet buttons
+      document.getElementById('btnEdit').addEventListener('click', ()=>{ openSheet('edit'); });
+      document.getElementById('btnDelete').addEventListener('click', showDeleteConfirm);
+      document.getElementById('btnSave').addEventListener('click', savePatient);
+      document.getElementById('btnCancel').addEventListener('click', ()=>{
+        if(currentMode==='create'){ closeSheet(); }
+        else { openSheet('view'); fillFormFromPatient(cachedPatient||{}); }
+      });
+      document.getElementById('btnConfirmDelete').addEventListener('click', confirmDelete);
+      document.getElementById('btnCancelDelete').addEventListener('click', hideDeleteConfirm);
+
+      // capability + first load
+      checkDeleteCapability();
+      listPatients();
+    });
+  </script>
+</body>
+</html>
+
+

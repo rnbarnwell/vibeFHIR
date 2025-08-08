@@ -33,17 +33,44 @@
   <h4 class="teal-text text-darken-3">FHIR R5 Patient Management</h4>
 
   <!-- Toolbar -->
-  <div class="row valign-wrapper">
-    <div class="input-field col s12 m6">
-      <input id="searchInput" type="text" placeholder="Search patients by name..."/>
-      <span class="helper">Example: "smith"</span>
+  <div class="row">
+    <div class="input-field col s12 m3">
+      <select id="searchType">
+        <option value="name" selected>Name</option>
+        <option value="address">Address</option>
+        <option value="birthdate">Birthdate</option>
+      </select>
+      <label>Search by</label>
     </div>
-    <div class="col s12 m6">
-      <button class="btn waves-effect waves-light teal" id="btnSearch">Search<i class="material-icons right">search</i></button>
-      <button class="btn waves-effect waves-light teal" id="btnListAll">List All<i class="material-icons right">list</i></button>
-      <button class="btn waves-effect waves-light" id="btnAdd"><i class="material-icons left">add</i>Add Patient</button>
+  
+    <!-- Text search input: used for Name or Address -->
+    <div class="input-field col s12 m5" id="searchTextWrapper">
+      <input id="searchText" type="text" placeholder="e.g., smith"/>
+      <label for="searchText" class="active">Search text</label>
+      <span class="helper" id="searchHelper">Example: "smith"</span>
+    </div>
+  
+    <!-- Date search input: used for Birthdate -->
+    <div class="input-field col s12 m4" id="searchDateWrapper" style="display:none;">
+      <input id="searchDate" type="date"/>
+      <label for="searchDate" class="active">Birthdate (YYYY-MM-DD)</label>
     </div>
   </div>
+  
+  <div class="row">
+    <div class="col s12">
+      <button class="btn waves-effect waves-light teal" id="btnSearch">
+        Search<i class="material-icons right">search</i>
+      </button>
+      <button class="btn waves-effect waves-light teal" id="btnListAll">
+        List All<i class="material-icons right">list</i>
+      </button>
+      <button class="btn waves-effect waves-light teal" id="btnAdd">
+        <i class="material-icons left">add</i>Add Patient
+      </button>
+    </div>
+  </div>
+
 
   <!-- Table -->
   <table class="striped highlight responsive-table" id="patientTable">
@@ -224,6 +251,27 @@
     function setSelectValue(selectEl,value){ if(value==null||value==='') return; let has=false; for(const o of selectEl.options){ if(o.value===value){has=true;break;} } if(!has) selectEl.add(new Option(value,value)); selectEl.value=value; reinitSelect(selectEl); }
     function isSafeResourceId(id){ return typeof id==='string' && /^[A-Za-z0-9\-.]{1,64}$/.test(id); }
 
+    function onSearchTypeChange() {
+      const type = document.getElementById('searchType').value;
+      const textWrap = document.getElementById('searchTextWrapper');
+      const dateWrap = document.getElementById('searchDateWrapper');
+      const text = document.getElementById('searchText');
+      const helper = document.getElementById('searchHelper');
+    
+      if (type === 'birthdate') {
+        textWrap.style.display = 'none';
+        dateWrap.style.display = '';
+        helper.textContent = '';
+      } else {
+        textWrap.style.display = '';
+        dateWrap.style.display = 'none';
+        text.placeholder = type === 'address' ? 'e.g., Boston or 02139' : 'e.g., smith';
+        document.getElementById('searchText').value = document.getElementById('searchText').value; // keep focus label correct
+        helper.textContent = type === 'address' ? 'Example: "Boston" or "02139"' : 'Example: "smith"';
+      }
+      M.updateTextFields();
+    }
+
     // ====== Name helpers (R5 safe) ======
     function pickOfficialOrFirst(arr) {
       if (!Array.isArray(arr) || arr.length === 0) return null;
@@ -348,15 +396,34 @@
       const target=url || `${fhirBaseUrl}/Patient?_count=${PAGE_SIZE}`;
       await fetchAndRender(target);
     }
+    
     async function searchPatients(url){
-      let target=url;
-      if(!target){
-        const q=document.getElementById('searchInput').value.trim();
-        if(!q) return listPatients();
-        target=`${fhirBaseUrl}/Patient?name=${encodeURIComponent(q)}&_count=${PAGE_SIZE}`;
+      // If a paging link is passed, just follow it.
+      if (url) { await fetchAndRender(url); return; }
+    
+      const type = document.getElementById('searchType').value;
+      let target;
+    
+      if (type === 'birthdate') {
+        const d = (document.getElementById('searchDate').value || '').trim();
+        if (!d) { M.toast({ html: 'Enter a birthdate' }); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { M.toast({ html: 'Birthdate must be YYYY-MM-DD' }); return; }
+        target = `${fhirBaseUrl}/Patient?birthdate=${encodeURIComponent(d)}&_count=${PAGE_SIZE}`;
+      } else if (type === 'address') {
+        const q = (document.getElementById('searchText').value || '').trim();
+        if (!q) { M.toast({ html: 'Enter address text (city, postal code, etc.)' }); return; }
+        target = `${fhirBaseUrl}/Patient?address=${encodeURIComponent(q)}&_count=${PAGE_SIZE}`;
+      } else {
+        // name (default)
+        const q = (document.getElementById('searchText').value || '').trim();
+        if (!q) { return listPatients(); }
+        target = `${fhirBaseUrl}/Patient?name=${encodeURIComponent(q)}&_count=${PAGE_SIZE}`;
       }
+    
       await fetchAndRender(target);
     }
+
+    
     function nextPage(){ if(paging.nextUrl) fetchAndRender(paging.nextUrl); }
     function prevPage(){ if(paging.prevUrl) fetchAndRender(paging.prevUrl); }
 
@@ -700,6 +767,17 @@
       });
       document.getElementById('btnConfirmDelete').addEventListener('click', confirmDelete);
       document.getElementById('btnCancelDelete').addEventListener('click', hideDeleteConfirm);
+
+      // search UI events
+      document.getElementById('searchType').addEventListener('change', onSearchTypeChange);
+      document.getElementById('btnSearch').addEventListener('click', ()=>searchPatients());
+      document.getElementById('btnListAll').addEventListener('click', ()=>listPatients());
+      // Enter-to-search
+      document.getElementById('searchText').addEventListener('keydown', (e)=>{ if(e.key==='Enter') searchPatients(); });
+      document.getElementById('searchDate').addEventListener('keydown', (e)=>{ if(e.key==='Enter') searchPatients(); });
+
+      // set initial visibility/placeholder
+      onSearchTypeChange();
 
       // capability + first load
       checkDeleteCapability();

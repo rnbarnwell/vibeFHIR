@@ -40,7 +40,7 @@
     </div>
     <div class="col s12 m6">
       <button class="btn waves-effect waves-light teal" id="btnSearch">Search<i class="material-icons right">search</i></button>
-      <button class="btn waves-effect waves-light grey" id="btnListAll">List All<i class="material-icons right">list</i></button>
+      <button class="btn waves-effect waves-light teal" id="btnListAll">List All<i class="material-icons right">list</i></button>
       <button class="btn waves-effect waves-light" id="btnAdd"><i class="material-icons left">add</i>Add Patient</button>
     </div>
   </div>
@@ -361,11 +361,18 @@
     function prevPage(){ if(paging.prevUrl) fetchAndRender(paging.prevUrl); }
 
     // ====== UPDATE PAGINATION BUTTONS ======
-    function updatePagination(links=[]){
-      paging.nextUrl=null; paging.prevUrl=null;
-      for(const link of links){ if(link.relation==='next') paging.nextUrl=link.url; if(link.relation==='previous') paging.prevUrl=link.url; }
-      document.getElementById('nextBtn').disabled=!paging.nextUrl;
-      document.getElementById('prevBtn').disabled=!paging.prevUrl;
+    function updatePagination(links = []) {
+      paging.nextUrl = null;
+      paging.prevUrl = null;
+    
+      for (const link of links) {
+        const rel = (link.relation || '').toLowerCase();
+        if (rel === 'next') paging.nextUrl = link.url;
+        if (rel === 'previous' || rel === 'prev' || rel === 'prior') paging.prevUrl = link.url;
+      }
+    
+      document.getElementById('nextBtn').disabled = !paging.nextUrl;
+      document.getElementById('prevBtn').disabled = !paging.prevUrl;
     }
 
     // ====== TABLE RENDER ======

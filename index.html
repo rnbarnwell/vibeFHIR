@@ -770,8 +770,7 @@
 
       // search UI events
       document.getElementById('searchType').addEventListener('change', onSearchTypeChange);
-      document.getElementById('btnSearch').addEventListener('click', ()=>searchPatients());
-      document.getElementById('btnListAll').addEventListener('click', ()=>listPatients());
+      // toolbar buttons wired above; avoid duplicate listeners
       // Enter-to-search
       document.getElementById('searchText').addEventListener('keydown', (e)=>{ if(e.key==='Enter') searchPatients(); });
       document.getElementById('searchDate').addEventListener('keydown', (e)=>{ if(e.key==='Enter') searchPatients(); });

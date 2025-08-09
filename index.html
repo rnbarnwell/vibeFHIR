@@ -223,6 +223,8 @@
     </div>
   </div>
 
+  <div id="toastAnnouncer" aria-live="polite" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;"></div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
   <script>
     // ====== CONFIG ======
@@ -251,6 +253,12 @@
     function reinitSelect(el){ const inst=M.FormSelect.getInstance(el); if(inst) inst.destroy(); M.FormSelect.init(el); }
     function setSelectValue(selectEl,value){ if(value==null||value==='') return; let has=false; for(const o of selectEl.options){ if(o.value===value){has=true;break;} } if(!has) selectEl.add(new Option(value,value)); selectEl.value=value; reinitSelect(selectEl); }
     function isSafeResourceId(id){ return typeof id==='string' && /^[A-Za-z0-9\-.]{1,64}$/.test(id); }
+
+    function announceToast(message){
+      M.toast({ html: message });
+      const announcer = document.getElementById('toastAnnouncer');
+      if(announcer) announcer.textContent = message;
+    }
 
     function onSearchTypeChange() {
       const type = document.getElementById('searchType').value;
@@ -405,7 +413,7 @@
         lastRequestUrl=url;
       }catch(err){
         console.error('GET failed:', err);
-        M.toast({ html:`Request failed: ${err.message}` });
+        announceToast(`Request failed: ${err.message}`);
       }
     }
 
@@ -424,12 +432,12 @@
     
       if (type === 'birthdate') {
         const d = (document.getElementById('searchDate').value || '').trim();
-        if (!d) { M.toast({ html: 'Enter a birthdate' }); return; }
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { M.toast({ html: 'Birthdate must be YYYY-MM-DD' }); return; }
+        if (!d) { announceToast('Enter a birthdate'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { announceToast('Birthdate must be YYYY-MM-DD'); return; }
         target = `${fhirBaseUrl}/Patient?birthdate=${encodeURIComponent(d)}&_count=${PAGE_SIZE}`;
       } else if (type === 'address') {
         const q = (document.getElementById('searchText').value || '').trim();
-        if (!q) { M.toast({ html: 'Enter address text (city, postal code, etc.)' }); return; }
+        if (!q) { announceToast('Enter address text (city, postal code, etc.)'); return; }
         target = `${fhirBaseUrl}/Patient?address=${encodeURIComponent(q)}&_count=${PAGE_SIZE}`;
       } else {
         // name (default)
@@ -653,7 +661,7 @@
         openSheet('view');
       }catch(err){
         console.error(err);
-        M.toast({ html:`Failed to load patient: ${err.message}` });
+        announceToast(`Failed to load patient: ${err.message}`);
       }
     }
 
@@ -664,7 +672,7 @@
           fillFormFromPatient(p);
         }catch(err){
           console.error(err);
-          M.toast({ html:`Failed to load patient: ${err.message}` });
+          announceToast(`Failed to load patient: ${err.message}`);
           return;
         }
       }else{
@@ -686,18 +694,18 @@
       const method=hasId? 'PUT':'POST';
       try{
         await fetchJSON(url,{ method, body: JSON.stringify(patient) });
-        M.toast({ html: hasId ? 'Patient updated' : 'Patient created' });
+        announceToast(hasId ? 'Patient updated' : 'Patient created');
         closeSheet();
         if(lastRequestUrl) fetchAndRender(lastRequestUrl); else listPatients();
       }catch(err){
         console.error('Save failed:', err);
-        M.toast({ html:`Save failed: ${err.message}` });
+        announceToast(`Save failed: ${err.message}`);
       }
     }
 
     // Delete flow: inline confirm (no window.confirm)
     async function openDeleteConfirmFor(id){
-      if(!isSafeResourceId(id)){ M.toast({ html: 'Delete unavailable: missing/invalid id' }); return; }
+      if(!isSafeResourceId(id)){ announceToast('Delete unavailable: missing/invalid id'); return; }
       // ensure sheet shows the patient (for context)
       try{
         const p=await fetchJSON(`${fhirBaseUrl}/Patient/${encodeURIComponent(id)}`);
@@ -711,18 +719,18 @@
 
     async function confirmDelete(){
       const id=document.getElementById('patientId').value;
-      if(!isSafeResourceId(id)){ M.toast({ html: 'Delete unavailable: missing/invalid id' }); return; }
+      if(!isSafeResourceId(id)){ announceToast('Delete unavailable: missing/invalid id'); return; }
 
       try{
         const url = `${fhirBaseUrl}/Patient/${encodeURIComponent(id)}?_cascade=delete`;
         await fetchJSON(url, { method:'DELETE' });
         if(getStoredSelectedId()===id){ clearStoredSelectedId(); if(selectedRow) selectedRow.classList.remove('row-selected'); selectedRow=null; }
-        M.toast({ html:'Patient deleted' });
+        announceToast('Patient deleted');
         closeSheet();
         if(lastRequestUrl) fetchAndRender(lastRequestUrl); else listPatients();
       }catch(err){
         console.error('Delete failed:', err);
-        M.toast({ html:`Delete failed: ${err.message}` });
+        announceToast(`Delete failed: ${err.message}`);
       }
     }
 

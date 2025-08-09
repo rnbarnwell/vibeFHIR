@@ -93,10 +93,10 @@
   </div>
 
   <!-- SIDE SHEET (right) -->
-  <div id="detailSheet" class="sidenav">
+  <div id="detailSheet" class="sidenav" role="dialog" aria-modal="true">
     <div class="sheet-header">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h6 id="sheetTitle" class="sheet-title">Details</h6>
+        <h6 id="sheetTitle" class="sheet-title" tabindex="-1">Details</h6>
         <button class="btn-flat" id="btnCloseSheet" aria-label="Close">
           <i class="material-icons">close</i>
         </button>
@@ -305,15 +305,32 @@
     let sheetInst=null;
     let currentMode='view'; // 'view' | 'edit' | 'create'
     let cachedPatient=null; // last loaded/being edited patient
+    let lastFocusEl=null;
+    let sheetOpen=false;
 
     function openSheet(mode){
       currentMode = mode;
+      if(!sheetOpen) lastFocusEl=document.activeElement;
       sheetInst.open();
+      sheetOpen=true;
       updateSheetModeUI();
+      setTimeout(()=>{
+        const header=document.getElementById('sheetTitle');
+        if(header) header.focus();
+        else {
+          const first=document.querySelector('#detailSheet input, #detailSheet select, #detailSheet textarea, #detailSheet button');
+          if(first) first.focus();
+        }
+      },0);
     }
     function closeSheet(){
       sheetInst.close();
       hideDeleteConfirm();
+      sheetOpen=false;
+      if(lastFocusEl && typeof lastFocusEl.focus==='function'){
+        lastFocusEl.focus();
+        lastFocusEl=null;
+      }
     }
     function updateSheetModeUI(){
       const isView = currentMode==='view';

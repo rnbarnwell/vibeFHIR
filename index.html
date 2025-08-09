@@ -454,6 +454,7 @@
         const name = humanNameToDisplay(nameObj) || '(no name)';
         const row=document.createElement('tr');
         row.dataset.pid=p.id||'';
+        row.setAttribute('tabindex','0');
         row.innerHTML=`
           <td>${p.id||''}</td>
           <td>${name}</td>
@@ -466,6 +467,16 @@
 
         // Row click -> view sheet
         row.addEventListener('click', async ()=>{ selectRow(row); await viewPatient(p.id); });
+
+        // Keyboard access -> view sheet
+        row.addEventListener('keydown', async (e)=>{
+          if(e.target!==row) return;
+          if(e.key==='Enter' || e.key===' '){
+            e.preventDefault();
+            selectRow(row);
+            await viewPatient(p.id);
+          }
+        });
 
         // Row actions
         const editBtn=row.querySelector('button.edit-btn');
